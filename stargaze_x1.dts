@@ -1,0 +1,831 @@
+//==============================================================================
+// stargaze_x1_140k.dts - Stargaze X1 140K SoC Device Tree
+// 4× RV64GC RISC-V cores @ 3.4GHz base / 3.9GHz boost
+// Stellaris iGPU with 512MB reserved memory
+//==============================================================================
+
+/dts-v1/;
+
+/ {
+    model = "Stargaze X1 140K";
+    compatible = "stargaze,x1-140k";
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    //==========================================================================
+    // CPU Cluster
+    //==========================================================================
+    
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        timebase-frequency = <24000000>;  // 24MHz RTC
+
+        cpu0: cpu@0 {
+            device_type = "cpu";
+            reg = <0>;
+            compatible = "riscv";
+            riscv,isa = "rv64imafdcv";
+            riscv,isa-extensions = "rv64i", "rv64m", "rv64a", "rv64f",
+                                   "rv64d", "rv64c", "rv64v";
+            mmu-type = "riscv,sv48";
+            clock-frequency = <3400000000>;  // 3.4GHz base
+            clock-latency = <1500>;
+            
+            cpu0_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+            
+            cpu0_pmu: pmu {
+                compatible = "riscv,pmu";
+                riscv,event-to-mhpmevent = <0x01 0x0001>,   // Instructions
+                                          <0x02 0x0002>,   // Cycles
+                                          <0x03 0x0003>,   // Branch mispred
+                                          <0x04 0x0004>,   // L1I miss
+                                          <0x05 0x0005>,   // L1D miss
+                                          <0x06 0x0006>;   // L2 miss
+                riscv,event-to-mhpmcounters = <0x01 0x18>,
+                                              <0x02 0x18>,
+                                              <0x03 0x18>,
+                                              <0x04 0x18>,
+                                              <0x05 0x18>,
+                                              <0x06 0x18>;
+                riscv,raw-event-to-mhpmcounters = <0x00 0x00 0xffffffff 
+                                                   0xfc0000ff 0x18>;
+            };
+            
+            cooling-device = <&cpu0_cooling>;
+        };
+
+        cpu1: cpu@1 {
+            device_type = "cpu";
+            reg = <1>;
+            compatible = "riscv";
+            riscv,isa = "rv64imafdcv";
+            mmu-type = "riscv,sv48";
+            clock-frequency = <3400000000>;
+            clock-latency = <1500>;
+            
+            cpu1_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+            
+            cooling-device = <&cpu1_cooling>;
+        };
+
+        cpu2: cpu@2 {
+            device_type = "cpu";
+            reg = <2>;
+            compatible = "riscv";
+            riscv,isa = "rv64imafdcv";
+            mmu-type = "riscv,sv48";
+            clock-frequency = <3400000000>;
+            clock-latency = <1500>;
+            
+            cpu2_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+            
+            cooling-device = <&cpu2_cooling>;
+        };
+
+        cpu3: cpu@3 {
+            device_type = "cpu";
+            reg = <3>;
+            compatible = "riscv";
+            riscv,isa = "rv64imafdcv";
+            mmu-type = "riscv,sv48";
+            clock-frequency = <3400000000>;
+            clock-latency = <1500>;
+            
+            cpu3_intc: interrupt-controller {
+                #interrupt-cells = <1>;
+                compatible = "riscv,cpu-intc";
+                interrupt-controller;
+            };
+            
+            cooling-device = <&cpu3_cooling>;
+        };
+
+        // CPU topology: All 4 cores in single cluster
+        cpu-map {
+            cluster0 {
+                core0 { cpu = <&cpu0>; };
+                core1 { cpu = <&cpu1>; };
+                core2 { cpu = <&cpu2>; };
+                core3 { cpu = <&cpu3>; };
+            };
+        };
+    };
+
+    //==========================================================================
+    // OPP Table - Operating Performance Points
+    //==========================================================================
+    
+    cpu_opp_table: opp-table-cpu {
+        compatible = "operating-points-v2";
+        opp-shared;  // All CPUs share the same OPP table
+
+        // 1.2GHz - Low Power
+        opp-1200000000 {
+            opp-hz = /bits/ 64 <1200000000>;
+            opp-microvolt = <600000>;
+            opp-level = <0>;
+            clock-latency-ns = <5000>;
+            opp-sustainable;
+        };
+
+        // 1.8GHz - Power Save
+        opp-1800000000 {
+            opp-hz = /bits/ 64 <1800000000>;
+            opp-microvolt = <650000>;
+            opp-level = <1>;
+            clock-latency-ns = <4000>;
+            opp-sustainable;
+        };
+
+        // 2.4GHz - Efficiency
+        opp-2400000000 {
+            opp-hz = /bits/ 64 <2400000000>;
+            opp-microvolt = <700000>;
+            opp-level = <2>;
+            clock-latency-ns = <3000>;
+            opp-sustainable;
+        };
+
+        // 2.8GHz - Balanced
+        opp-2800000000 {
+            opp-hz = /bits/ 64 <2800000000>;
+            opp-microvolt = <750000>;
+            opp-level = <3>;
+            clock-latency-ns = <2500>;
+            opp-sustainable;
+        };
+
+        // 3.2GHz - Performance
+        opp-3200000000 {
+            opp-hz = /bits/ 64 <3200000000>;
+            opp-microvolt = <820000>;
+            opp-level = <4>;
+            clock-latency-ns = <2000>;
+            opp-sustainable;
+        };
+
+        // 3.4GHz - Base (Default)
+        opp-3400000000 {
+            opp-hz = /bits/ 64 <3400000000>;
+            opp-microvolt = <850000>;
+            opp-level = <5>;
+            clock-latency-ns = <1500>;
+            opp-sustainable;
+            stargaze,default;
+        };
+
+        // 3.6GHz - Boost 1
+        opp-3600000000 {
+            opp-hz = /bits/ 64 <3600000000>;
+            opp-microvolt = <900000>;
+            opp-level = <6>;
+            clock-latency-ns = <1300>;
+            opp-supported-hw = <0x01>;
+            turbo-mode;
+        };
+
+        // 3.8GHz - Boost 2
+        opp-3800000000 {
+            opp-hz = /bits/ 64 <3800000000>;
+            opp-microvolt = <930000>;
+            opp-level = <7>;
+            clock-latency-ns = <1100>;
+            opp-supported-hw = <0x01>;
+            turbo-mode;
+        };
+
+        // 3.9GHz - Maximum Boost
+        opp-3900000000 {
+            opp-hz = /bits/ 64 <3900000000>;
+            opp-microvolt = <950000>;
+            opp-level = <8>;
+            clock-latency-ns = <1000>;
+            opp-supported-hw = <0x01>;
+            turbo-mode;
+        };
+    };
+
+    //==========================================================================
+    // Boost Configuration
+    //==========================================================================
+    
+    stargaze_boost {
+        compatible = "stargaze,boost-config";
+        
+        stargaze,boost-threshold = <85>;        // 85% load triggers boost
+        stargaze,boost-exit-threshold = <65>;    // 65% load exits boost
+        stargaze,boost-consecutive-samples = <3>;
+        stargaze,boost-min-hold-us = <50000>;    // 50ms minimum hold
+        stargaze,boost-cooldown-us = <20000>;    // 20ms cooldown
+        stargaze,boost-max-temp = <65>;          // No boost above 65°C
+        
+        stargaze,boost-opps = <&cpu_opp_table 6>,
+                              <&cpu_opp_table 7>,
+                              <&cpu_opp_table 8>;
+    };
+
+    //==========================================================================
+    // Memory Map
+    //==========================================================================
+    
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0x0 0x80000000 0x0 0x20000000>;  // 512MB DRAM
+    };
+
+    // Reserved memory for iGPU
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        gpu_framebuffer: gpu-fb@8000000000 {
+            compatible = "stargaze,gpu-framebuffer";
+            reg = <0x80 0x00000000 0x0 0x20000000>;  // 512MB
+            no-map;
+        };
+
+        gpu_shader_heap: gpu-shader@800C000000 {
+            compatible = "shared-dma-pool";
+            reg = <0x80 0x0C000000 0x0 0x02000000>;  // 32MB
+            no-map;
+        };
+    };
+
+    //==========================================================================
+    // SoC Bus
+    //==========================================================================
+    
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        compatible = "stargaze,x1-140k-soc", "simple-bus";
+        ranges;
+
+        //======================================================================
+        // Clock Management Unit (CMU)
+        //======================================================================
+        
+        cmu: clock-controller@6000000000 {
+            compatible = "stargaze,x1-140k-cmu";
+            reg = <0x60 0x00000000 0x0 0x1000>;
+            #clock-cells = <1>;
+            clock-output-names = "cpu_clk", "gpu_clk", "mem_clk",
+                                 "noc_clk", "periph_clk", "sys_clk";
+            
+            clocks = <&xtal_24mhz>, <&xtal_32k>;
+            clock-names = "xtal_24mhz", "xtal_32k";
+            
+            // PLL configuration
+            stargaze,pll-ref-freq = <24000000>;
+            stargaze,pll-base-mult = <142>;   // 3.4GHz
+            stargaze,pll-boost-mult = <163>;  // 3.9GHz
+            stargaze,pll-lock-timeout-us = <100>;
+        };
+
+        //======================================================================
+        // Power Management Unit (PMU)
+        //======================================================================
+        
+        pmu: power-management@6001000000 {
+            compatible = "stargaze,x1-140k-pmu";
+            reg = <0x60 0x01000000 0x0 0x1000>;
+            interrupts = <&plic 161>;  // Power warning interrupt
+            interrupt-names = "warning";
+            
+            vdd_cpu: cpu-regulator {
+                compatible = "stargaze,vreg";
+                regulator-name = "vdd_cpu";
+                regulator-min-microvolt = <600000>;
+                regulator-max-microvolt = <1050000>;
+                regulator-step-microvolt = <5000>;
+                regulator-ramp-delay = <20>;
+                regulator-always-on;
+            };
+            
+            vdd_gpu: gpu-regulator {
+                compatible = "stargaze,vreg";
+                regulator-name = "vdd_gpu";
+                regulator-min-microvolt = <600000>;
+                regulator-max-microvolt = <1000000>;
+                regulator-step-microvolt = <5000>;
+                regulator-ramp-delay = <20>;
+            };
+        };
+
+        //======================================================================
+        // Platform-Level Interrupt Controller (PLIC)
+        //======================================================================
+        
+        plic: interrupt-controller@6004000000 {
+            compatible = "riscv,plic0", "sifive,plic-1.0.0";
+            reg = <0x60 0x04000000 0x0 0x4000000>;
+            #interrupt-cells = <2>;
+            #address-cells = <0>;
+            interrupt-controller;
+            interrupts-extended = <&cpu0_intc 11 &cpu0_intc 9>,
+                                  <&cpu1_intc 11 &cpu1_intc 9>,
+                                  <&cpu2_intc 11 &cpu2_intc 9>,
+                                  <&cpu3_intc 11 &cpu3_intc 9>;
+            riscv,ndev = <256>;
+            riscv,max-priority = <255>;
+        };
+
+        //======================================================================
+        // Core-Local Interrupt Controller (CLINT)
+        //======================================================================
+        
+        clint: timer@6005000000 {
+            compatible = "riscv,clint0";
+            reg = <0x60 0x05000000 0x0 0x10000>;
+            interrupts-extended = <&cpu0_intc 3 &cpu0_intc 7>,
+                                  <&cpu1_intc 3 &cpu1_intc 7>,
+                                  <&cpu2_intc 3 &cpu2_intc 7>,
+                                  <&cpu3_intc 3 &cpu3_intc 7>;
+        };
+
+        //======================================================================
+        // Thermal Sensors
+        //======================================================================
+        
+        thermal: thermal-sensor@6003000000 {
+            compatible = "stargaze,x1-140k-thermal";
+            reg = <0x60 0x03000000 0x0 0x1000>;
+            #thermal-sensor-cells = <1>;
+            interrupts = <&plic 161>;  // Thermal interrupt
+            interrupt-names = "thermal";
+            
+            stargaze,thermal-sensors = <8>;
+            stargaze,thermal-hysteresis = <5000>;  // 5°C
+            stargaze,thermal-polling-ms = <100>;
+        };
+
+        //======================================================================
+        // CPU Frequency Scaling (cpufreq)
+        //======================================================================
+        
+        cpufreq: cpufreq@6001000000 {
+            compatible = "stargaze,x1-140k-cpufreq";
+            clocks = <&cmu 0>;  // CPU clock
+            clock-names = "cpu_clk";
+            operating-points-v2 = <&cpu_opp_table>;
+            
+            vdd-supply = <&vdd_cpu>;
+            
+            stargaze,boost-threshold = <85>;
+            stargaze,thermal-throttle-temp = <85>;
+            stargaze,critical-temp = <105>;
+        };
+
+        //======================================================================
+        // Stellaris iGPU
+        //======================================================================
+        
+        gpu: gpu@5000000000 {
+            compatible = "stargaze,x1-140k-gpu";
+            reg = <0x50 0x00000000 0x0 0x10000>;  // GPU control registers
+            reg-names = "gpu-ctrl";
+            
+            interrupts = <&plic 32>,   // GPU complete
+                         <&plic 33>,   // GPU fault
+                         <&plic 34>,   // GPU hang
+                         <&plic 35>;   // GPU vsync
+            interrupt-names = "complete", "fault", "hang", "vsync";
+            
+            clocks = <&cmu 1>;  // GPU clock
+            clock-names = "gpu_clk";
+            vdd-supply = <&vdd_gpu>;
+            
+            // Memory configuration
+            memory-region = <&gpu_framebuffer>;
+            stargaze,shader-heap = <&gpu_shader_heap>;
+            
+            // GPU capabilities
+            stargaze,compute-units = <16>;
+            stargaze,rops = <32>;
+            stargaze,tmus = <64>;
+            stargaze,max-frequency = <1500000000>;  // 1.5GHz
+            stargaze,base-frequency = <1000000000>;  // 1.0GHz
+            
+            // Framebuffer configuration
+            stargaze,max-resolution = <3840 2160>;  // 4K
+            stargaze,max-refresh = <144>;            // 144Hz
+            stargaze,supports-msaa = <8>;            // 8x MSAA
+            
+            // Display output
+            ports {
+                #address-cells = <1>;
+                #size-cells = <0>;
+                
+                port@0 {
+                    reg = <0>;
+                    gpu_dp_out: endpoint {
+                        remote-endpoint = <&dp_encoder_in>;
+                    };
+                };
+            };
+        };
+
+        //======================================================================
+        // GPU MMU
+        //======================================================================
+        
+        gpu_mmu: iommu@5001000000 {
+            compatible = "stargaze,x1-140k-gpu-mmu";
+            reg = <0x50 0x01000000 0x0 0x10000>;
+            #iommu-cells = <1>;
+            interrupt-parent = <&plic>;
+            interrupts = <36>;
+            interrupt-names = "mmu-fault";
+            
+            stargaze,page-size = <4096>;
+            stargaze,address-bits = <40>;
+            stargaze,max-mappings = <65536>;
+        };
+
+        //======================================================================
+        // DisplayPort Controller
+        //======================================================================
+        
+        displayport: dp@5002000000 {
+            compatible = "stargaze,x1-140k-dp";
+            reg = <0x50 0x02000000 0x0 0x10000>;
+            reg-names = "dp-ctrl";
+            
+            interrupts = <&plic 144>,   // Hotplug
+                         <&plic 145>,   // HDCP
+                         <&plic 146>;   // AUX
+            interrupt-names = "hotplug", "hdcp", "aux";
+            
+            clocks = <&cmu 10>;
+            clock-names = "dp_pixel";
+            
+            dp_encoder_in: endpoint {
+                remote-endpoint = <&gpu_dp_out>;
+            };
+            
+            connector {
+                compatible = "dp-connector";
+                type = "full-size";
+                hpd-gpios = <&gpio 0 0>;
+            };
+        };
+
+        //======================================================================
+        // L3 Cache Controller
+        //======================================================================
+        
+        l3_cache: cache-controller@6010000000 {
+            compatible = "stargaze,x1-140k-l3-cache";
+            reg = <0x60 0x10000000 0x0 0x10000>;
+            
+            cache-unified;
+            cache-size = <4194304>;     // 4MB
+            cache-line-size = <64>;
+            cache-sets = <4096>;
+            cache-associativity = <16>;
+            cache-level = <3>;
+            
+            interrupts = <&plic 64>,    // Parity error
+                         <&plic 65>;    // Fill complete
+            interrupt-names = "error", "fill-done";
+        };
+
+        //======================================================================
+        // DDR Memory Controller
+        //======================================================================
+        
+        memory-controller@6020000000 {
+            compatible = "stargaze,x1-140k-ddr";
+            reg = <0x60 0x20000000 0x0 0x10000>;
+            
+            interrupts = <&plic 48>,    // ECC error
+                         <&plic 49>,    // ECC corrected
+                         <&plic 52>;    // Training done
+            interrupt-names = "ecc-error", "ecc-corrected", "training-done";
+            
+            stargaze,ddr-type = "lpddr5x";
+            stargaze,ddr-speed = <4008000>;    // 4.008GHz
+            stargaze,ddr-channels = <1>;
+            stargaze,ddr-width = <32>;
+            stargaze,ddr-ranks = <2>;
+            stargaze,ddr-banks = <8>;
+        };
+
+        //======================================================================
+        // Network-on-Chip Interconnect
+        //======================================================================
+        
+        noc: noc@6030000000 {
+            compatible = "stargaze,x1-140k-noc";
+            reg = <0x60 0x30000000 0x0 0x10000>;
+            
+            stargaze,noc-topology = "mesh";
+            stargaze,noc-dimensions = <3 3>;
+            stargaze,noc-frequency = <2400000>;  // 2.4GHz
+            
+            interrupts = <&plic 96>;
+            interrupt-names = "noc-error";
+        };
+
+        //======================================================================
+        // DMA Controller
+        //======================================================================
+        
+        dma: dma-controller@6106000000 {
+            compatible = "stargaze,x1-140k-dma";
+            reg = <0x61 0x06000000 0x0 0x10000>;
+            
+            interrupts = <&plic 80>,    // Channel 0 complete
+                         <&plic 81>,    // Channel 0 error
+                         <&plic 82>,    // Channel 1 complete
+                         <&plic 83>;    // Channel 1 error
+            interrupt-names = "ch0-done", "ch0-error",
+                             "ch1-done", "ch1-error";
+            
+            #dma-cells = <1>;
+            dma-channels = <2>;
+            stargaze,max-burst-size = <256>;
+        };
+
+        //======================================================================
+        // UART
+        //======================================================================
+        
+        uart0: serial@6100000000 {
+            compatible = "ns16550a";
+            reg = <0x61 0x00000000 0x0 0x1000>;
+            reg-shift = <2>;
+            reg-io-width = <4>;
+            
+            interrupts = <&plic 96>;
+            interrupt-parent = <&plic>;
+            
+            clocks = <&cmu 5>;
+            clock-names = "baudclk";
+            current-speed = <115200>;
+        };
+
+        //======================================================================
+        // SPI
+        //======================================================================
+        
+        spi0: spi@6101000000 {
+            compatible = "stargaze,x1-140k-spi";
+            reg = <0x61 0x01000000 0x0 0x1000>;
+            
+            interrupts = <&plic 98>;
+            interrupt-parent = <&plic>;
+            
+            #address-cells = <1>;
+            #size-cells = <0>;
+            clocks = <&cmu 5>;
+        };
+
+        //======================================================================
+        // I2C
+        //======================================================================
+        
+        i2c0: i2c@6102000000 {
+            compatible = "stargaze,x1-140k-i2c";
+            reg = <0x61 0x02000000 0x0 0x1000>;
+            
+            interrupts = <&plic 99>;
+            interrupt-parent = <&plic>;
+            
+            #address-cells = <1>;
+            #size-cells = <0>;
+            clock-frequency = <400000>;
+        };
+
+        //======================================================================
+        // GPIO
+        //======================================================================
+        
+        gpio: gpio@6103000000 {
+            compatible = "stargaze,x1-140k-gpio";
+            reg = <0x61 0x03000000 0x0 0x1000>;
+            
+            interrupts = <&plic 100>;
+            interrupt-parent = <&plic>;
+            
+            #gpio-cells = <2>;
+            gpio-controller;
+            
+            stargaze,gpio-banks = <4>;
+            stargaze,gpio-per-bank = <32>;
+        };
+
+        //======================================================================
+        // Timers
+        //======================================================================
+        
+        timer0: timer@6104000000 {
+            compatible = "stargaze,x1-140k-timer";
+            reg = <0x61 0x04000000 0x0 0x1000>;
+            
+            interrupts = <&plic 101>,   // Timer 0
+                         <&plic 102>;   // Timer 1
+            interrupt-names = "timer0", "timer1";
+            interrupt-parent = <&plic>;
+            
+            clocks = <&cmu 5>;
+        };
+
+        //======================================================================
+        // Watchdog
+        //======================================================================
+        
+        watchdog: watchdog@6105000000 {
+            compatible = "stargaze,x1-140k-wdt";
+            reg = <0x61 0x05000000 0x0 0x1000>;
+            
+            interrupts = <&plic 103>;
+            interrupt-parent = <&plic>;
+            
+            clocks = <&cmu 5>;
+            timeout-sec = <30>;
+        };
+
+        //======================================================================
+        // PCIe Root Complex (Gen4 ×4)
+        //======================================================================
+        
+        pcie: pcie@6200000000 {
+            compatible = "stargaze,x1-140k-pcie";
+            reg = <0x62 0x00000000 0x0 0x10000>;
+            
+            #address-cells = <3>;
+            #size-cells = <2>;
+            
+            interrupts = <&plic 128>,   // MSI base
+                         <&plic 136>,   // Error
+                         <&plic 137>,   // Hotplug
+                         <&plic 138>;   // PME
+            interrupt-names = "msi", "error", "hotplug", "pme";
+            interrupt-parent = <&plic>;
+            
+            bus-range = <0x00 0xff>;
+            
+            ranges = <0x81000000 0x0 0x00000000 0x70 0x00000000 0x0 0x1000000>,  // IO
+                     <0x82000000 0x0 0x00000000 0x80 0x00000000 0x0 0x40000000>;  // Memory
+            
+            stargaze,pcie-lanes = <4>;
+            stargaze,pcie-generation = <4>;
+        };
+    };
+
+    //==========================================================================
+    // Thermal Zones
+    //==========================================================================
+    
+    thermal-zones {
+        cpu-thermal {
+            polling-delay-passive = <100>;
+            polling-delay = <500>;
+            thermal-sensors = <&thermal 0>;
+            
+            trips {
+                cpu_alert: cpu-alert {
+                    temperature = <65000>;
+                    hysteresis = <5000>;
+                    type = "passive";
+                };
+                
+                cpu_crit: cpu-crit {
+                    temperature = <105000>;
+                    hysteresis = <2000>;
+                    type = "critical";
+                };
+            };
+            
+            cooling-maps {
+                map0 {
+                    trip = <&cpu_alert>;
+                    cooling-device = <&cpu0_cooling 0 4>,
+                                     <&cpu1_cooling 0 4>,
+                                     <&cpu2_cooling 0 4>,
+                                     <&cpu3_cooling 0 4>;
+                };
+            };
+        };
+        
+        gpu-thermal {
+            polling-delay-passive = <100>;
+            polling-delay = <500>;
+            thermal-sensors = <&thermal 1>;
+            
+            trips {
+                gpu_alert: gpu-alert {
+                    temperature = <75000>;
+                    hysteresis = <5000>;
+                    type = "passive";
+                };
+                
+                gpu_crit: gpu-crit {
+                    temperature = <100000>;
+                    hysteresis = <2000>;
+                    type = "critical";
+                };
+            };
+            
+            cooling-maps {
+                map0 {
+                    trip = <&gpu_alert>;
+                    cooling-device = <&gpu_cooling 0 3>;
+                };
+            };
+        };
+        
+        soc-thermal {
+            polling-delay-passive = <200>;
+            polling-delay = <1000>;
+            thermal-sensors = <&thermal 6>;
+            
+            trips {
+                soc_alert: soc-alert {
+                    temperature = <75000>;
+                    hysteresis = <5000>;
+                    type = "passive";
+                };
+                
+                soc_crit: soc-crit {
+                    temperature = <90000>;
+                    hysteresis = <2000>;
+                    type = "critical";
+                };
+            };
+        };
+    };
+
+    //==========================================================================
+    // Cooling Devices
+    //==========================================================================
+    
+    cpu0_cooling: cpu0-cooling {
+        compatible = "stargaze,cpu-cooling";
+        #cooling-cells = <2>;
+        stargaze,cooling-levels = <0 1 2 3 4>;  // Throttle levels
+    };
+    
+    cpu1_cooling: cpu1-cooling {
+        compatible = "stargaze,cpu-cooling";
+        #cooling-cells = <2>;
+    };
+    
+    cpu2_cooling: cpu2-cooling {
+        compatible = "stargaze,cpu-cooling";
+        #cooling-cells = <2>;
+    };
+    
+    cpu3_cooling: cpu3-cooling {
+        compatible = "stargaze,cpu-cooling";
+        #cooling-cells = <2>;
+    };
+    
+    gpu_cooling: gpu-cooling {
+        compatible = "stargaze,gpu-cooling";
+        #cooling-cells = <2>;
+        stargaze,cooling-levels = <0 1 2 3>;
+    };
+
+    //==========================================================================
+    // External Clocks
+    //==========================================================================
+    
+    xtal_24mhz: xtal-24mhz {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <24000000>;
+        clock-output-names = "xtal_24mhz";
+    };
+    
+    xtal_32k: xtal-32k {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <32768>;
+        clock-output-names = "xtal_32k";
+    };
+
+    //==========================================================================
+    // Chosen node for boot configuration
+    //==========================================================================
+    
+    chosen {
+        bootargs = "console=ttyS0,115200 earlycon=sbi root=/dev/mmcblk0p2 rw";
+        stdout-path = "serial0:115200n8";
+    };
+};
